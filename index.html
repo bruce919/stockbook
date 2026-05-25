@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智股管家 - 股票買賣管理系統</title>
+    <!-- Tailwind CSS 最新 CDN 引入 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js 圖表庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome 圖示庫 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            950: '#090d16'
+                        },
+                        stockUp: '#ef4444',     // 紅色上漲 (台灣習慣)
+                        stockDown: '#22c55e'    // 綠色下跌 (台灣習慣)
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #0b0f19;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-brand-600 p-2.5 rounded-xl shadow-lg shadow-brand-500/30">
+                    <i class="fa-solid fa-chart-line-upward text-xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-wider bg-gradient-to-r from-brand-100 to-brand-500 bg-clip-text text-transparent">智股管家</h1>
+                    <p class="text-[10px] text-slate-400">股票買賣管理系統 v1.4</p>
+                </div>
+            </div>
+
+            <!-- 連線狀態 & 更新計時器 -->
+            <div class="flex items-center space-x-4">
+                <!-- 智股管家常駐動態連線狀態燈 -->
+                <div id="connectionStatusBadge" class="hidden sm:flex items-center px-3 py-1 rounded-full text-xs font-medium border">
+                    <!-- JS 動態寫入內容與不同狀態顏色 -->
+                </div>
+                <div class="flex items-center bg-slate-800/80 rounded-lg px-3 py-1.5 border border-slate-700 text-xs">
+                    <i class="fa-solid fa-clock text-slate-400 mr-2"></i>
+                    <span id="countdownTimer" class="font-mono text-brand-100">30:00</span>
+                    <button onclick="syncData()" title="立即重新整理" class="ml-2 hover:text-brand-500 transition-colors">
+                        <i id="syncIcon" class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 頁面頁籤導覽 -->
+    <nav class="bg-slate-900 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-8 overflow-x-auto py-3">
+                <button onclick="switchTab('dashboard')" id="btn-dashboard" class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-500 whitespace-nowrap">
+                    <i class="fa-solid fa-chart-pie mr-2"></i>資產大盤
+                </button>
+                <button onclick="switchTab('portfolio')" id="btn-portfolio" class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-100 whitespace-nowrap">
+                    <i class="fa-solid fa-briefcase mr-2"></i>我的庫存
+                </button>
+                <button onclick="switchTab('transaction')" id="btn-transaction" class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-100 whitespace-nowrap">
+                    <i class="fa-solid fa-money-bill-transfer mr-2"></i>新增交易
+                </button>
+                <button onclick="switchTab('history')" id="btn-history" class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-100 whitespace-nowrap">
+                    <i class="fa-solid fa-list-check mr-2"></i>交易歷史紀錄
+                </button>
+                <button onclick="switchTab('settings')" id="btn-settings" class="tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-100 whitespace-nowrap">
+                    <i class="fa-solid fa-database mr-2"></i>雲端資料庫設定
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主體內容區 -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- TAB: DASHBOARD (資產大盤) -->
+        <section id="tab-dashboard" class="tab-content block space-y-6">
+            <!-- 數據總覽卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- 總資產市值 -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
+                    <div class="absolute top-0 right-0 p-4 opacity-10">
+                        <i class="fa-solid fa-wallet text-6xl"></i>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">目前總市值</p>
+                    <p id="card-totalValue" class="text-3xl font-bold text-slate-100 mt-2 font-mono">--</p>
+                    <div class="mt-4 flex items-center text-xs text-slate-400">
+                        <span class="mr-2">持有持股之目前即時總價值</span>
+                    </div>
+                </div>
+                <!-- 投資本金 -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
+                    <div class="absolute top-0 right-0 p-4 opacity-10">
+                        <i class="fa-solid fa-coins text-6xl"></i>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">目前持有成本 (本金)</p>
+                    <p id="card-totalCost" class="text-3xl font-bold text-slate-100 mt-2 font-mono">--</p>
+                    <div class="mt-4 flex items-center text-xs text-slate-400">
+                        <span>未售出股票之加權總成本</span>
+                    </div>
+                </div>
+                <!-- 未實現損益 -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
+                    <div class="absolute top-0 right-0 p-4 opacity-10">
+                        <i class="fa-solid fa-receipt text-6xl"></i>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">未實現損益</p>
+                    <p id="card-unrealized" class="text-3xl font-bold mt-2 font-mono">--</p>
+                    <div class="mt-4 flex items-center text-xs text-slate-400">
+                        <span id="card-unrealizedRoi" class="font-bold mr-1">--</span>
+                        <span>預估未實現投資報酬率</span>
+                    </div>
+                </div>
+                <!-- 已實現損益 -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-xl">
+                    <div class="absolute top-0 right-0 p-4 opacity-10">
+                        <i class="fa-solid fa-circle-dollar-to-slot text-6xl"></i>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">已實現損益 (落袋為安)</p>
+                    <p id="card-realized" class="text-3xl font-bold mt-2 font-mono">--</p>
+                    <div class="mt-4 flex items-center text-xs text-slate-400">
+                        <span>扣除原始成本後之賣出總盈虧</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 圖表分析 -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 左：庫存佔比圖 -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-md font-bold text-slate-200 mb-1"><i class="fa-solid fa-chart-pie text-brand-500 mr-2"></i>庫存比例分佈</h3>
+                        <p class="text-xs text-slate-400">依據各股最新市值計算持有比重</p>
+                    </div>
+                    <div class="my-6 relative flex items-center justify-center" style="height: 240px;">
+                        <canvas id="portfolioPieChart"></canvas>
+                        <div id="noDataPie" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 bg-slate-900/90 hidden">
+                            目前無庫存持股
+                        </div>
+                    </div>
+                </div>
+                <!-- 右：個股投資總覽與損益條 -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl lg:col-span-2 flex flex-col">
+                    <div class="mb-4">
+                        <h3 class="text-md font-bold text-slate-200 mb-1"><i class="fa-solid fa-chart-simple text-brand-500 mr-2"></i>持股損益分析圖表</h3>
+                        <p class="text-xs text-slate-400">視覺化呈現每檔股票之持有成本與未實現利潤</p>
+                    </div>
+                    <div class="flex-grow" style="min-height: 240px; position: relative;">
+                        <canvas id="stockProfitBarChart"></canvas>
+                        <div id="noDataBar" class="absolute inset-0 flex items-center justify-center text-xs text-slate-400 bg-slate-900/90 hidden">
+                            尚無數據
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: PORTFOLIO (庫存) -->
+        <section id="tab-portfolio" class="tab-content hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <div class="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-200">當前持股明細</h3>
+                        <p class="text-xs text-slate-400 mt-1">本表使用「加權平均成本法」計算持有股數與累計成本</p>
+                    </div>
+                    <div class="text-xs bg-slate-800 rounded-lg p-2 text-slate-300">
+                        <i class="fa-solid fa-circle-info mr-1 text-brand-500"></i>
+                        如欲看最新股價更新，請點擊頂部重新整理
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-950 text-slate-300 text-xs uppercase tracking-wider border-b border-slate-800">
+                                <th class="py-4 px-6 font-semibold">股票代號</th>
+                                <th class="py-4 px-6 font-semibold">持有股數</th>
+                                <th class="py-4 px-6 font-semibold">平均買入成本</th>
+                                <th class="py-4 px-6 font-semibold">最新股價</th>
+                                <th class="py-4 px-6 font-semibold">投資本金</th>
+                                <th class="py-4 px-6 font-semibold">當前市值</th>
+                                <th class="py-4 px-6 font-semibold">未實現損益</th>
+                                <th class="py-4 px-6 font-semibold">投報率 (ROI)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="portfolioTableBody" class="divide-y divide-slate-800/50 text-sm">
+                            <!-- JS 動態插入 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: TRANSACTION (新增交易) -->
+        <section id="tab-transaction" class="tab-content hidden max-w-2xl mx-auto">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <!-- 買入 / 賣出切換 -->
+                <div class="flex border-b border-slate-800 bg-slate-950">
+                    <button onclick="setTxType('buy')" id="btn-txType-buy" class="flex-1 py-4 text-center font-bold text-sm text-stockUp bg-slate-900/50 border-b-2 border-stockUp">
+                        <i class="fa-solid fa-circle-plus mr-2"></i>買入股票 (Buy)
+                    </button>
+                    <button onclick="setTxType('sell')" id="btn-txType-sell" class="flex-1 py-4 text-center font-bold text-sm text-slate-500 hover:text-stockDown border-b-2 border-transparent transition-colors">
+                        <i class="fa-solid fa-circle-minus mr-2"></i>賣出股票 (Sell)
+                    </button>
+                </div>
+
+                <form id="txForm" onsubmit="handleFormSubmit(event)" class="p-8 space-y-6">
+                    <input type="hidden" id="txType" value="buy">
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- 交易日期 -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-2">交易日期</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                                    <i class="fa-regular fa-calendar"></i>
+                                </div>
+                                <input type="date" id="txDate" required class="block w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm">
+                            </div>
+                        </div>
+
+                        <!-- 股票代號 -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-2">股票代號</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                                    <i class="fa-solid fa-hashtag"></i>
+                                </div>
+                                <input type="text" id="txStockCode" placeholder="如 2330, TPE:2330, AAPL" required class="block w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm uppercase">
+                            </div>
+                        </div>
+
+                        <!-- 股數 -->
+                        <div>
+                            <label id="lblShares" class="block text-xs font-semibold text-slate-400 mb-2">買入股數</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                                    <i class="fa-solid fa-cubes"></i>
+                                </div>
+                                <input type="number" id="txShares" min="1" placeholder="請輸入股數" required oninput="calculateTxTotal()" class="block w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm">
+                            </div>
+                        </div>
+
+                        <!-- 價格 -->
+                        <div>
+                            <label id="lblPrice" class="block text-xs font-semibold text-slate-400 mb-2">買入價格 (單股)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                                    <i class="fa-solid fa-dollar-sign"></i>
+                                </div>
+                                <input type="number" id="txPrice" step="0.01" min="0.01" placeholder="請輸入成交價" required oninput="calculateTxTotal()" class="block w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 買賣總價 (自動計算) -->
+                    <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-4 flex items-center justify-between">
+                        <div>
+                            <p id="lblTotal" class="text-xs text-slate-400">預估交易總價</p>
+                            <p class="text-[10px] text-slate-500 mt-1">計算方式：股數 × 單股價格</p>
+                        </div>
+                        <div class="text-right">
+                            <span id="txTotalDisplay" class="text-xl font-bold font-mono text-brand-100">$ 0</span>
+                        </div>
+                    </div>
+
+                    <!-- 送出按鈕 -->
+                    <button type="submit" id="submitBtn" class="w-full bg-gradient-to-r from-brand-600 to-brand-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg hover:shadow-brand-500/20 active:scale-[0.99] transition-all flex items-center justify-center">
+                        <i class="fa-solid fa-cloud-arrow-up mr-2"></i>
+                        <span id="submitBtnText">確認送出交易</span>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB: HISTORY (交易歷史) -->
+        <section id="tab-history" class="tab-content hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <div class="p-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-200">股票交易明細紀錄</h3>
+                        <p class="text-xs text-slate-400 mt-1">此處條列出所有買入與賣出的完整交易流水帳</p>
+                    </div>
+                    <!-- 搜尋與篩選 -->
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 text-xs">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </div>
+                            <input type="text" id="historySearchInput" oninput="filterHistoryTable()" placeholder="搜尋股票代號..." class="block w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        </div>
+                        <select id="historyTypeFilter" onchange="filterHistoryTable()" class="bg-slate-950 border border-slate-800 text-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="all">所有交易類型</option>
+                            <option value="buy">僅看 買入</option>
+                            <option value="sell">僅看 賣出</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-950 text-slate-300 text-xs uppercase tracking-wider border-b border-slate-800">
+                                <th class="py-4 px-6 font-semibold">交易日期</th>
+                                <th class="py-4 px-6 font-semibold">類型</th>
+                                <th class="py-4 px-6 font-semibold">股票代號</th>
+                                <th class="py-4 px-6 font-semibold">股數</th>
+                                <th class="py-4 px-6 font-semibold">單價</th>
+                                <th class="py-4 px-6 font-semibold">成交總價</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody" class="divide-y divide-slate-800/50 text-sm">
+                            <!-- JS 動態插入 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: SETTINGS (雲端資料庫設定) -->
+        <section id="tab-settings" class="tab-content hidden max-w-4xl mx-auto space-y-6">
+            
+            <!-- 雲端連線設定卡片 -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+                <div>
+                    <h3 class="text-md font-bold text-slate-200"><i class="fa-solid fa-link text-brand-500 mr-2"></i>Google Sheets 連線與綁定設定</h3>
+                    <p class="text-xs text-slate-400 mt-1">請將您部署好 Google Apps Script 所取得的「網頁應用程式 URL」貼在下方並進行連線測試。</p>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-2">Google Apps Script 網頁應用程式 URL (明碼文字)</label>
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <input type="text" id="appsScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" class="flex-grow px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <button onclick="testConnection()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center whitespace-nowrap shadow-lg shadow-brand-500/15">
+                                <i class="fa-solid fa-plug-circle-check mr-2"></i>測試並儲存連線
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-slate-500 mt-1.5">此欄位採明碼顯示，方便您確認複製的 URL 是否完整。網址將安全存儲於您本地瀏覽器的快取中。</p>
+                    </div>
+                </div>
+
+                <!-- 一鍵寫入測試資料與機制說明 (免手動開關，連線成功會自動執行雲端) -->
+                <div class="pt-6 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400">資料同步機制</p>
+                        <p class="text-[10px] text-slate-500 mt-1">只要設定上方網址，系統將自動優先與 Google Sheets 進行即時雙向同步。未連線時則自動啟用本地快取模式。</p>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center gap-3">
+                        <!-- 一鍵寫入測試資料按鈕 (連線成功後顯示) -->
+                        <button id="btnWriteTestData" onclick="writeTestDataToCloud()" class="hidden px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all flex items-center shadow-lg shadow-amber-500/15">
+                            <i class="fa-solid fa-cloud-arrow-up mr-1.5"></i>匯入測試資料到 Google 試算表
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 一鍵疑難排解與手動驗證區 -->
+            <div class="bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-xl space-y-4">
+                <h3 class="text-md font-bold text-amber-400"><i class="fa-solid fa-triangle-exclamation mr-2"></i>為何我的試算表「一片空白、沒有任何資料」？</h3>
+                <p class="text-xs text-slate-300">
+                    當您第一次與 Google 試算表對接時，您的 Google 試算表剛被建立，內無任何買賣資料，因此網頁端會讀出空的表格。您可以：
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 text-xs">
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-slate-400">
+                        <p class="font-bold text-slate-200">💡 排除方法 1：點擊「匯入測試資料」</p>
+                        <p class="text-[11px]">使用上方我們貼心為您設計的<span class="text-brand-300 font-semibold">「匯入測試資料到 Google 試算表」</span>按鈕，這會模擬發送 5 筆交易至您的雲端，完成後會自動更新大盤與圖表！</p>
+                    </div>
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-slate-400">
+                        <p class="font-bold text-slate-200">💡 排除方法 2：手動移植舊資料</p>
+                        <p class="text-[11px]">如果您原本就有股票帳目，請**務必**將資料填入這兩個指定的工作表，欄位名稱不能有任何錯字：</p>
+                        <ul class="list-disc pl-4 text-[10px] text-slate-500 space-y-0.5">
+                            <li><span class="text-slate-300">買入紀錄</span>：日期 | 股票代號 | 買入股數 | 買入價格 | 買入總價</li>
+                            <li><span class="text-slate-300">賣出紀錄</span>：日期 | 股票代號 | 賣出股數 | 賣出價格 | 賣出總價</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Google Sheets 設定指南 -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+                <div>
+                    <h3 class="text-md font-bold text-slate-200"><i class="fa-solid fa-circle-question text-brand-500 mr-2"></i>5 分鐘快速設定教學 (如何綁定 Google 試算表)</h3>
+                    <p class="text-xs text-slate-400 mt-1">透過 Google 的 API 機制，您可以將本機端網頁，安全且完全免費地連動到您的雲端試算表。</p>
+                </div>
+
+                <!-- 步驟列表 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-300">
+                    <div class="bg-slate-950 border border-slate-800/80 p-4 rounded-xl space-y-2">
+                        <div class="w-6 h-6 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center font-bold">1</div>
+                        <p class="font-bold text-slate-100">建立試算表</p>
+                        <p class="text-slate-400">登入您的 Google 雲端硬碟，新建一個全新的「試算表 (Google Sheet)」。</p>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/80 p-4 rounded-xl space-y-2">
+                        <div class="w-6 h-6 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center font-bold">2</div>
+                        <p class="font-bold text-slate-100">打開指令碼編輯器</p>
+                        <p class="text-slate-400">在試算表頂端選單，點選：<span class="text-brand-300 font-bold">「擴充功能」 > 「Apps Script」</span>。</p>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/80 p-4 rounded-xl space-y-2">
+                        <div class="w-6 h-6 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center font-bold">3</div>
+                        <p class="font-bold text-slate-100">貼上並部署程式碼</p>
+                        <p class="text-slate-400">刪除編輯器內原本的所有程式碼，改貼入下方的程式碼後存檔。點選右上角「部署」>「新增部署」。</p>
+                    </div>
+                </div>
+
+                <!-- 部署設定與注意事項 -->
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-2">
+                    <p class="font-bold text-slate-300"><i class="fa-solid fa-triangle-exclamation text-amber-500 mr-1"></i>部署設定關鍵 (請務必照做)：</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>選取種類：<span class="text-slate-200 font-semibold">「網頁應用程式」 (Web App)</span>。</li>
+                        <li>將專案執行為：<span class="text-slate-200 font-semibold">「我」 (Me - 您的 Google 帳戶)</span>。</li>
+                        <li>誰有權限存取：<span class="text-slate-200 font-semibold">「任何人」 (Anyone)</span> （以便網頁前端能直接傳送交易到此試算表）。</li>
+                        <li>點擊「部署」後授予權限。複製最後產生的<span class="text-brand-300 font-bold">「網頁應用程式 URL」</span>，貼回到上方的設定欄位即可。</li>
+                    </ul>
+                </div>
+
+                <!-- 程式碼複製區 -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-400">Google Apps Script 程式碼</span>
+                        <button onclick="copyAppsScriptCode()" class="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center">
+                            <i id="copyIcon" class="fa-solid fa-copy mr-1.5"></i><span id="copyBtnText">複製程式碼</span>
+                        </button>
+                    </div>
+                    <textarea id="appsScriptCodeArea" readonly class="w-full h-64 p-4 bg-slate-950 border border-slate-850 rounded-xl text-slate-300 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-slate-800" style="resize: none;"></textarea>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 頁尾 -->
+    <footer class="border-t border-slate-800 bg-slate-950 py-4 text-center text-xs text-slate-500">
+        <div>© 2026 智股管家. 所有運算皆在客戶端完成。</div>
+    </footer>
+
+    <!-- 客製化 Modal (代替 window.alert) -->
+    <div id="customModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl scale-95 transition-all duration-300">
+            <div class="flex items-center space-x-3 mb-4">
+                <div id="modalIconBg" class="p-2.5 rounded-full bg-brand-500/10 text-brand-400">
+                    <i id="modalIcon" class="fa-solid fa-circle-info text-xl"></i>
+                </div>
+                <h3 id="modalTitle" class="text-md font-bold text-slate-100">系統提示</h3>
+            </div>
+            <p id="modalMessage" class="text-xs text-slate-300 leading-relaxed mb-6"></p>
+            <div id="modalActions" class="space-y-2">
+                <button onclick="closeModal()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 py-2.5 rounded-xl font-semibold text-xs transition-colors">
+                    確認
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS 邏輯處理 -->
+    <script>
+        // === 1. 初始化資料與狀態管理 ===
+        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'stock-manager-v1';
+        
+        // 預設沙盒模擬數據 (未連線或連線失敗時，暫存本機快取使用)
+        const DEFAULT_MOCK_BUYS = [
+            { Date: "2026-01-10", StockCode: "TPE:2330", Shares: 1000, Price: 600, Total: 600000 },
+            { Date: "2026-02-15", StockCode: "TPE:2330", Shares: 500, Price: 620, Total: 310000 },
+            { Date: "2026-01-20", StockCode: "TPE:2317", Shares: 2000, Price: 100, Total: 200000 }
+        ];
+        const DEFAULT_MOCK_SELLS = [
+            { Date: "2026-03-01", StockCode: "TPE:2330", Shares: 500, Price: 650, Total: 325000 },
+            { Date: "2026-04-05", StockCode: "TPE:2317", Shares: 1000, Price: 120, Total: 120000 }
+        ];
+        const DEFAULT_MOCK_PRICES = {
+            "TPE:2330": 780.00,
+            "TPE:2317": 155.00
+        };
+
+        // 系統全局變數
+        let buyTransactions = [];
+        let sellTransactions = [];
+        let livePrices = {};
+        
+        let appsScriptUrl = "";
+        let connectionState = 'UNCONFIGURED'; // 'UNCONFIGURED' | 'CONNECTING' | 'CONNECTED' | 'FAILED'
+        let countdownSeconds = 1800; // 30分鐘 = 1800秒
+        let countdownInterval = null;
+
+        // 圖表物件
+        let pieChart = null;
+        let barChart = null;
+
+        // === 2. 視窗載入初始化 ===
+        window.onload = function() {
+            // 設定交易表單之預設日期為今天
+            document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+            
+            // 載入 localStorage 的設定
+            loadSettings();
+            
+            // 載入指令碼文字給使用者複製
+            loadAppsScriptTemplate();
+
+            // 啟動資料載入
+            initSystemData();
+
+            // 啟動 30 分鐘自動定時刷新計時器
+            startRefreshTimer();
+        }
+
+        // 讀取設定
+        function loadSettings() {
+            const savedUrl = localStorage.getItem(`${APP_ID}_appsScriptUrl`);
+            appsScriptUrl = savedUrl || "";
+            document.getElementById('appsScriptUrl').value = appsScriptUrl;
+        }
+
+        // 保存設定
+        function saveSettings() {
+            localStorage.setItem(`${APP_ID}_appsScriptUrl`, appsScriptUrl);
+        }
+
+        // 動態變更右上角之 Google Sheet 狀態指示燈
+        function updateConnectionStatus(state) {
+            connectionState = state;
+            const badge = document.getElementById('connectionStatusBadge');
+            badge.classList.remove('hidden');
+            
+            let bgColor = "";
+            let textColor = "";
+            let borderColor = "";
+            let dotColor = "";
+            let text = "";
+            let animate = "";
+
+            switch(state) {
+                case 'UNCONFIGURED': // 灰色 - 尚未設定網址
+                    bgColor = "bg-slate-800/80";
+                    textColor = "text-slate-400";
+                    borderColor = "border-slate-700";
+                    dotColor = "bg-slate-500";
+                    text = "尚未設定雲端連線";
+                    animate = "";
+                    break;
+                case 'CONNECTING': // 藍色 - 正在連動測試中
+                    bgColor = "bg-sky-500/10";
+                    textColor = "text-sky-400";
+                    borderColor = "border-sky-500/20";
+                    dotColor = "bg-sky-400";
+                    text = "檢測雲端連線中...";
+                    animate = "animate-pulse";
+                    break;
+                case 'CONNECTED': // 綠色 - 連線成功
+                    bgColor = "bg-emerald-500/10";
+                    textColor = "text-emerald-400";
+                    borderColor = "border-emerald-500/20";
+                    dotColor = "bg-emerald-400";
+                    text = "Google Sheet 已連線";
+                    animate = "animate-ping";
+                    break;
+                case 'FAILED': // 紅色 - 驗證失敗、離線
+                    bgColor = "bg-rose-500/10";
+                    textColor = "text-rose-400";
+                    borderColor = "border-rose-500/20";
+                    dotColor = "bg-rose-400";
+                    text = "Google Sheet 連線失敗";
+                    animate = "animate-pulse";
+                    break;
+            }
+
+            badge.className = `hidden sm:flex items-center px-3 py-1 rounded-full text-xs font-medium ${bgColor} ${textColor} border ${borderColor}`;
+            badge.innerHTML = `
+                <span class="relative flex h-2 w-2 mr-2">
+                    <span class="${animate} absolute inline-flex h-full w-full rounded-full ${dotColor} opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 ${dotColor}"></span>
+                </span>
+                <span>${text}</span>
+            `;
+        }
+
+        // 初始化系統數據 (依模式偵測)
+        function initSystemData() {
+            if (!appsScriptUrl) {
+                // 未設定連線 -> 顯示灰色狀態、載入本地離線暫存資料
+                updateConnectionStatus('UNCONFIGURED');
+                document.getElementById('btnWriteTestData').classList.add('hidden');
+                loadMockData();
+            } else {
+                // 已設定網址 -> 啟動連線同步
+                fetchDataFromGoogleSheets();
+            }
+        }
+
+        // 載入模擬展示數據 / 本地快取
+        function loadMockData() {
+            // 從 localStorage 讀取先前寫入的紀錄
+            const localBuys = localStorage.getItem(`${APP_ID}_mock_buys`);
+            const localSells = localStorage.getItem(`${APP_ID}_mock_sells`);
+            const localPrices = localStorage.getItem(`${APP_ID}_mock_prices`);
+
+            if (localBuys && localSells) {
+                buyTransactions = JSON.parse(localBuys);
+                sellTransactions = JSON.parse(localSells);
+                livePrices = JSON.parse(localPrices) || DEFAULT_MOCK_PRICES;
+            } else {
+                buyTransactions = [...DEFAULT_MOCK_BUYS];
+                sellTransactions = [...DEFAULT_MOCK_SELLS];
+                livePrices = {...DEFAULT_MOCK_PRICES};
+                saveMockDataToLocal();
+            }
+
+            // 模擬市場股價微幅浮動 (本地體驗優良)
+            simulatePriceFluctuations();
+
+            // 更新畫面
+            updateDashboardAndTables();
+        }
+
+        // 保存沙盒模擬資料 / 本地暫存
+        function saveMockDataToLocal() {
+            localStorage.setItem(`${APP_ID}_mock_buys`, JSON.stringify(buyTransactions));
+            localStorage.setItem(`${APP_ID}_mock_sells`, JSON.stringify(sellTransactions));
+            localStorage.setItem(`${APP_ID}_mock_prices`, JSON.stringify(livePrices));
+        }
+
+        // 模擬股市波動
+        function simulatePriceFluctuations() {
+            for (const stock in livePrices) {
+                const change = (Math.random() * 3 - 1.5) / 100;
+                livePrices[stock] = Math.max(1, +(livePrices[stock] * (1 + change)).toFixed(2));
+            }
+        }
+
+        // === 3. Google Sheets 連線 API ===
+        async function fetchDataFromGoogleSheets() {
+            const syncIcon = document.getElementById('syncIcon');
+            syncIcon.classList.add('animate-spin');
+            updateConnectionStatus('CONNECTING');
+            document.getElementById('btnWriteTestData').classList.add('hidden');
+            
+            try {
+                // 使用 fetch 來取得試算表中的資料 (Google Apps Script)
+                const response = await fetch(`${appsScriptUrl}?t=${Date.now()}`, {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+
+                if (!response.ok) throw new Error("連線失敗，請檢查 URL");
+
+                const data = await response.json();
+                
+                buyTransactions = data.buy || [];
+                sellTransactions = data.sell || [];
+                livePrices = data.prices || {};
+
+                updateDashboardAndTables();
+                updateConnectionStatus('CONNECTED');
+                document.getElementById('btnWriteTestData').classList.remove('hidden');
+                
+                if (buyTransactions.length === 0 && sellTransactions.length === 0) {
+                    showToast("同步成功！目前雲端試算表尚無交易資料", "info");
+                } else {
+                    showToast("同步成功！已從 Google 試算表下載最新資料", "success");
+                }
+                resetTimer();
+            } catch (error) {
+                console.error("API Error:", error);
+                updateConnectionStatus('FAILED');
+                
+                // 連線失敗時，自動載入本地暫存資料
+                loadMockData();
+                showDiagnosisModal("連線失敗", "無法與您的 Google Apps Script 建立連線，已自動載入本地暫存數據。");
+            } finally {
+                syncIcon.classList.remove('animate-spin');
+            }
+        }
+
+        // 發送交易資料到 Google Apps Script
+        async function postTransactionToSheets(type, data) {
+            const action = type === "buy" ? "addBuy" : "addSell";
+            const payload = {
+                action: action,
+                date: data.Date,
+                stockCode: data.StockCode,
+                shares: data.Shares,
+                price: data.Price
+            };
+
+            const submitBtn = document.getElementById('submitBtn');
+            const submitBtnText = document.getElementById('submitBtnText');
+            submitBtn.disabled = true;
+            submitBtnText.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-2"></i>資料傳送中...`;
+
+            try {
+                const response = await fetch(appsScriptUrl, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error("傳送失敗");
+
+                const result = await response.json();
+                if (result.status === "success") {
+                    showToast("交易資料已成功寫入 Google 試算表！", "success");
+                    // 立即重新向試算表請求最新庫存與新加載的 GOOGLEFINANCE 股價
+                    await fetchDataFromGoogleSheets();
+                    return true;
+                } else {
+                    throw new Error("試算表寫入失敗");
+                }
+            } catch (error) {
+                console.error("Post Error:", error);
+                showDiagnosisModal("寫入雲端失敗", "連線異常，無法將交易寫入試算表。請確認您的網際網路與部署權限設定。");
+                return false;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtnText.innerHTML = `<i class="fa-solid fa-cloud-arrow-up mr-2"></i>確認送出交易`;
+            }
+        }
+
+        // 寫入預設測試資料至 Google 試算表
+        async function writeTestDataToCloud() {
+            const btn = document.getElementById('btnWriteTestData');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1.5"></i>寫入中...`;
+
+            try {
+                const response = await fetch(appsScriptUrl, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    body: JSON.stringify({ action: "addTestData" })
+                });
+
+                if (!response.ok) throw new Error("寫入失敗");
+                
+                showModal("🎉 匯入成功！", "已成功將 5 筆經典的買賣模擬資料寫入您的 Google 試算表中！系統隨後將為您重新載入資料。");
+                await fetchDataFromGoogleSheets();
+            } catch(e) {
+                console.error(e);
+                showModal("匯入失敗", "無法將測試資料傳入。請確認您的 Apps Script 程式碼已更新為最新版，且網址正確。");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up mr-1.5"></i>匯入測試資料到 Google 試算表`;
+            }
+        }
+
+        // 測試連線
+        async function testConnection() {
+            const testUrl = document.getElementById('appsScriptUrl').value.trim();
+            if (!testUrl) {
+                showModal("請輸入網址", "測試連線前，請先貼上 Google Apps Script 部署所得的應用程式 URL。");
+                return;
+            }
+
+            appsScriptUrl = testUrl;
+            saveSettings();
+
+            showToast("正在建立測試連線...", "info");
+            
+            try {
+                const response = await fetch(`${appsScriptUrl}?t=${Date.now()}`, {
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+
+                if (response.ok) {
+                    showModal("🎉 連線成功並已儲存網址！", "順利通過雲端連線測試。您的 Google 試算表已成功跟本系統綁定！");
+                    initSystemData();
+                } else {
+                    throw new Error("試算表拒絕存取");
+                }
+            } catch (error) {
+                showDiagnosisModal("連線測試失敗", "無法成功接收到 API 的回傳信號。這可能由多種原因引起。");
+            }
+        }
+
+        // 輔助排解：在新分頁直接開啟 API 網址
+        function openApiUrlInNewTab() {
+            const url = document.getElementById('appsScriptUrl').value.trim();
+            if (!url) {
+                showModal("提示", "請先於輸入框填入您的 Google Apps Script 網址。");
+                return;
+            }
+            window.open(url, '_blank');
+        }
+
+        // === 4. 財務計算邏輯與加權成本分析 ===
+        function processPortfolioData() {
+            const portfolio = {};
+
+            // A. 計算所有買入紀錄
+            buyTransactions.forEach(tx => {
+                const code = tx.StockCode.toUpperCase();
+                if (!portfolio[code]) {
+                    portfolio[code] = {
+                        code: code,
+                        totalBoughtShares: 0,
+                        totalBoughtCost: 0,
+                        totalSoldShares: 0,
+                        totalSoldRevenue: 0
+                    };
+                }
+                portfolio[code].totalBoughtShares += tx.Shares;
+                portfolio[code].totalBoughtCost += tx.Total;
+            });
+
+            // B. 計算所有賣出紀錄
+            sellTransactions.forEach(tx => {
+                const code = tx.StockCode.toUpperCase();
+                if (!portfolio[code]) {
+                    portfolio[code] = {
+                        code: code,
+                        totalBoughtShares: 0,
+                        totalBoughtCost: 0,
+                        totalSoldShares: 0,
+                        totalSoldRevenue: 0
+                    };
+                }
+                portfolio[code].totalSoldShares += tx.Shares;
+                portfolio[code].totalSoldRevenue += tx.Total;
+            });
+
+            // C. 進行加權平均演算
+            const summaryList = [];
+            let totalInvestment = 0;   // 現有持股的累計投資本金
+            let currentValue = 0;      // 現有持股的最新總市值
+            let totalRealizedPnL = 0;  // 已實現損益
+            let totalUnrealizedPnL = 0; // 未實現損益
+
+            for (const code in portfolio) {
+                const p = portfolio[code];
+                
+                // 1. 計算加權平均買入成本價
+                const avgBuyPrice = p.totalBoughtShares > 0 ? (p.totalBoughtCost / p.totalBoughtShares) : 0;
+                
+                // 2. 當前持有股數 (買入 - 賣出)
+                const remainingShares = p.totalBoughtShares - p.totalSoldShares;
+                
+                // 3. 最新價格 (優先取用即時股價，若無則暫以買入成本顯示)
+                const currentPrice = livePrices[code] !== undefined ? livePrices[code] : avgBuyPrice;
+
+                // 4. 已實現損益 (針對已售出持股，計算售出金額與平均買入成本之差)
+                const realizedPnL = p.totalSoldRevenue - (avgBuyPrice * p.totalSoldShares);
+                totalRealizedPnL += realizedPnL;
+
+                // 5. 針對仍在倉的股數計算未實現損益
+                let unrealizedPnL = 0;
+                let remainingCost = 0;
+                let marketValue = 0;
+                
+                if (remainingShares > 0) {
+                    remainingCost = remainingShares * avgBuyPrice;
+                    marketValue = remainingShares * currentPrice;
+                    unrealizedPnL = marketValue - remainingCost;
+                    
+                    totalInvestment += remainingCost;
+                    currentValue += marketValue;
+                    totalUnrealizedPnL += unrealizedPnL;
+                }
+
+                summaryList.push({
+                    code: code,
+                    remainingShares: remainingShares,
+                    avgBuyPrice: +avgBuyPrice.toFixed(2),
+                    currentPrice: +currentPrice.toFixed(2),
+                    totalCost: +remainingCost.toFixed(2),
+                    currentValue: +marketValue.toFixed(2),
+                    unrealizedPnL: +unrealizedPnL.toFixed(2),
+                    realizedPnL: +realizedPnL.toFixed(2),
+                    roi: remainingCost > 0 ? +(unrealizedPnL / remainingCost * 100).toFixed(2) : 0
+                });
+            }
+
+            return {
+                items: summaryList.filter(item => item.remainingShares > 0), 
+                totalInvestment: +totalInvestment.toFixed(2),
+                currentValue: +currentValue.toFixed(2),
+                unrealizedPnL: +totalUnrealizedPnL.toFixed(2),
+                realizedPnL: +totalRealizedPnL.toFixed(2)
+            };
+        }
+
+        // === 5. UI 渲染與資料表呈現 ===
+        function updateDashboardAndTables() {
+            const results = processPortfolioData();
+
+            // A. 更新數字大卡
+            document.getElementById('card-totalValue').innerHTML = formatCurrency(results.currentValue);
+            document.getElementById('card-totalCost').innerHTML = formatCurrency(results.totalInvestment);
+            
+            // 未實現損益顏色特效
+            const unRealizedEl = document.getElementById('card-unrealized');
+            const unRealizedRoiEl = document.getElementById('card-unrealizedRoi');
+            unRealizedEl.innerHTML = formatPnLText(results.unrealizedPnL);
+            
+            const roiPercent = results.totalInvestment > 0 ? +(results.unrealizedPnL / results.totalInvestment * 100).toFixed(2) : 0;
+            unRealizedRoiEl.innerHTML = (roiPercent >= 0 ? '+' : '') + roiPercent + '%';
+            if (results.unrealizedPnL > 0) {
+                unRealizedEl.className = "text-3xl font-bold mt-2 font-mono text-stockUp";
+                unRealizedRoiEl.className = "font-bold mr-1 text-stockUp";
+            } else if (results.unrealizedPnL < 0) {
+                unRealizedEl.className = "text-3xl font-bold mt-2 font-mono text-stockDown";
+                unRealizedRoiEl.className = "font-bold mr-1 text-stockDown";
+            } else {
+                unRealizedEl.className = "text-3xl font-bold mt-2 font-mono text-slate-100";
+                unRealizedRoiEl.className = "font-bold mr-1 text-slate-400";
+            }
+
+            // 已實現損益顏色特效
+            const realizedEl = document.getElementById('card-realized');
+            realizedEl.innerHTML = formatPnLText(results.realizedPnL);
+            if (results.realizedPnL > 0) {
+                realizedEl.className = "text-3xl font-bold mt-2 font-mono text-stockUp";
+            } else if (results.realizedPnL < 0) {
+                realizedEl.className = "text-3xl font-bold mt-2 font-mono text-stockDown";
+            } else {
+                realizedEl.className = "text-3xl font-bold mt-2 font-mono text-slate-100";
+            }
+
+            // B. 渲染我的庫存表格
+            renderPortfolioTable(results.items);
+
+            // C. 渲染交易歷史紀錄
+            renderHistoryTable();
+
+            // D. 重新繪製大盤動態圖表
+            renderCharts(results.items);
+        }
+
+        // 庫存持股表格渲染
+        function renderPortfolioTable(items) {
+            const tbody = document.getElementById('portfolioTableBody');
+            tbody.innerHTML = "";
+
+            if (items.length === 0) {
+                const isCloud = connectionState === 'CONNECTED';
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center py-12 text-slate-500 text-xs">
+                            <i class="fa-solid fa-folder-open text-3xl mb-3 text-slate-600 block animate-bounce"></i>
+                            目前無庫存持股。 ${isCloud ? '您的 Google 試算表目前無內容，請前往「新增交易」寫入第一筆資料。' : '您可以前往「新增交易」進行買入。'}
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/30 transition-colors";
+                
+                const pnlClass = item.unrealizedPnL >= 0 ? "text-stockUp font-bold" : "text-stockDown font-bold";
+                const pnlSign = item.unrealizedPnL >= 0 ? "+" : "";
+
+                tr.innerHTML = `
+                    <td class="py-4 px-6 font-semibold text-slate-100">${item.code}</td>
+                    <td class="py-4 px-6 font-mono">${formatNumber(item.remainingShares)} 股</td>
+                    <td class="py-4 px-6 font-mono">${formatCurrency(item.avgBuyPrice)}</td>
+                    <td class="py-4 px-6 font-mono text-brand-300 font-bold">${formatCurrency(item.currentPrice)}</td>
+                    <td class="py-4 px-6 font-mono text-slate-300">${formatCurrency(item.totalCost)}</td>
+                    <td class="py-4 px-6 font-mono text-slate-100">${formatCurrency(item.currentValue)}</td>
+                    <td class="py-4 px-6 font-mono ${pnlClass}">${pnlSign}${formatCurrency(item.unrealizedPnL)}</td>
+                    <td class="py-4 px-6 font-mono ${pnlClass}">${pnlSign}${item.roi}%</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 交易歷史表格渲染
+        function renderHistoryTable() {
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = "";
+
+            const allTxs = [];
+            buyTransactions.forEach(tx => allTxs.push({ ...tx, type: 'buy' }));
+            sellTransactions.forEach(tx => allTxs.push({ ...tx, type: 'sell' }));
+
+            allTxs.sort((a, b) => new Date(b.Date) - new Date(a.Date));
+
+            if (allTxs.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-8 text-slate-500 text-xs">
+                            <i class="fa-solid fa-clock-rotate-left text-2xl mb-2 block"></i>
+                            暫無任何交易紀錄
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            allTxs.forEach(tx => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/30 transition-colors history-row";
+                tr.dataset.code = tx.StockCode.toUpperCase();
+                tr.dataset.type = tx.type;
+
+                const isBuy = tx.type === 'buy';
+                const typeText = isBuy ? "買入" : "賣出";
+                const typeClass = isBuy ? "bg-stockUp/10 text-stockUp border-stockUp/20" : "bg-stockDown/10 text-stockDown border-stockDown/20";
+
+                tr.innerHTML = `
+                    <td class="py-4 px-6 font-mono text-xs text-slate-400">${tx.Date}</td>
+                    <td class="py-4 px-6">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-bold border ${typeClass}">
+                            ${typeText}
+                        </span>
+                    </td>
+                    <td class="py-4 px-6 font-semibold text-slate-100 uppercase">${tx.StockCode}</td>
+                    <td class="py-4 px-6 font-mono">${formatNumber(tx.Shares)} 股</td>
+                    <td class="py-4 px-6 font-mono">${formatCurrency(tx.Price)}</td>
+                    <td class="py-4 px-6 font-mono font-semibold text-slate-200">${formatCurrency(tx.Total)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 交易歷史搜尋過濾
+        function filterHistoryTable() {
+            const query = document.getElementById('historySearchInput').value.trim().toUpperCase();
+            const typeFilter = document.getElementById('historyTypeFilter').value;
+            const rows = document.querySelectorAll('.history-row');
+
+            rows.forEach(row => {
+                const code = row.dataset.code;
+                const type = row.dataset.type;
+
+                const matchCode = !query || code.includes(query);
+                const matchType = typeFilter === 'all' || type === typeFilter;
+
+                if (matchCode && matchType) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+        }
+
+        // === 6. 互動表單邏輯 ===
+        function setTxType(type) {
+            document.getElementById('txType').value = type;
+            
+            const buyBtn = document.getElementById('btn-txType-buy');
+            const sellBtn = document.getElementById('btn-txType-sell');
+            const lblShares = document.getElementById('lblShares');
+            const lblPrice = document.getElementById('lblPrice');
+            const lblTotal = document.getElementById('lblTotal');
+
+            if (type === 'buy') {
+                buyBtn.className = "flex-1 py-4 text-center font-bold text-sm text-stockUp bg-slate-900/50 border-b-2 border-stockUp";
+                sellBtn.className = "flex-1 py-4 text-center font-bold text-sm text-slate-500 hover:text-stockDown border-b-2 border-transparent transition-colors";
+                lblShares.innerText = "買入股數";
+                lblPrice.innerText = "買入價格 (單股)";
+                lblTotal.innerText = "預估交易總價";
+            } else {
+                sellBtn.className = "flex-1 py-4 text-center font-bold text-sm text-stockDown bg-slate-900/50 border-b-2 border-stockDown";
+                buyBtn.className = "flex-1 py-4 text-center font-bold text-sm text-slate-500 hover:text-stockUp border-b-2 border-transparent transition-colors";
+                lblShares.innerText = "賣出股數";
+                lblPrice.innerText = "賣出價格 (單股)";
+                lblTotal.innerText = "預估交易總計收回";
+            }
+            calculateTxTotal();
+        }
+
+        // 即時計算單筆交易總金額
+        function calculateTxTotal() {
+            const shares = +document.getElementById('txShares').value || 0;
+            const price = +document.getElementById('txPrice').value || 0;
+            const total = shares * price;
+            
+            document.getElementById('txTotalDisplay').innerText = formatCurrency(total);
+        }
+
+        // 交易表單確認送出
+        async function handleFormSubmit(event) {
+            event.preventDefault();
+
+            const type = document.getElementById('txType').value;
+            const date = document.getElementById('txDate').value;
+            const stockCode = document.getElementById('txStockCode').value.trim().toUpperCase();
+            const shares = +document.getElementById('txShares').value;
+            const price = +document.getElementById('txPrice').value;
+
+            if (!date || !stockCode || shares <= 0 || price <= 0) {
+                showModal("填寫錯誤", "請確實完整填寫所有欄位且金額與股數必須大於零。");
+                return;
+            }
+
+            // 針對賣出，作庫存餘額上限防呆
+            if (type === 'sell') {
+                const pData = processPortfolioData();
+                const heldStock = pData.items.find(item => item.code === stockCode);
+                if (!heldStock || heldStock.remainingShares < shares) {
+                    const heldCount = heldStock ? heldStock.remainingShares : 0;
+                    showModal("超額賣出防呆", `您目前持有的【${stockCode}】加權剩餘庫存為 ${heldCount} 股，無法賣出大於此數量的股數。`);
+                    return;
+                }
+            }
+
+            const total = +(shares * price).toFixed(2);
+            const txObj = {
+                Date: date,
+                StockCode: stockCode,
+                Shares: shares,
+                Price: price,
+                Total: total
+            };
+
+            let isSuccess = false;
+
+            // 只有當狀態為 CONNECTED 時才嘗試寫入雲端；其餘均安全暫存本機快取
+            if (connectionState === 'CONNECTED') {
+                isSuccess = await postTransactionToSheets(type, txObj);
+            } else {
+                // 寫入本機快取
+                if (type === 'buy') {
+                    buyTransactions.push(txObj);
+                } else {
+                    sellTransactions.push(txObj);
+                }
+                
+                if (livePrices[stockCode] === undefined) {
+                    livePrices[stockCode] = price;
+                }
+
+                saveMockDataToLocal();
+                updateDashboardAndTables();
+                isSuccess = true;
+                showToast(`[本地快取] 成功暫存【${stockCode}】之交易！`, "info");
+            }
+
+            if (isSuccess) {
+                document.getElementById('txStockCode').value = "";
+                document.getElementById('txShares').value = "";
+                document.getElementById('txPrice').value = "";
+                document.getElementById('txTotalDisplay').innerText = "$ 0";
+                switchTab('dashboard');
+            }
+        }
+
+        // === 7. 數據圖表繪製 (Chart.js) ===
+        function renderCharts(portfolioItems) {
+            // A. 處理 Pie Chart 庫存分佈圖
+            const pieCtx = document.getElementById('portfolioPieChart').getContext('2d');
+            
+            if (pieChart) pieChart.destroy();
+
+            if (portfolioItems.length === 0) {
+                document.getElementById('noDataPie').classList.remove('hidden');
+            } else {
+                document.getElementById('noDataPie').classList.add('hidden');
+                
+                const labels = portfolioItems.map(item => item.code);
+                const data = portfolioItems.map(item => item.currentValue);
+                const colors = [
+                    '#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', 
+                    '#8b5cf6', '#06b6d4', '#f43f5e', '#14b8a6', '#10b981'
+                ];
+
+                pieChart = new Chart(pieCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: colors.slice(0, labels.length),
+                            borderWidth: 2,
+                            borderColor: '#0f172a'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#94a3b8',
+                                    font: { size: 10, family: 'Noto Sans TC' },
+                                    boxWidth: 12
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.parsed;
+                                        const sum = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const pct = (value / sum * 100).toFixed(1) + '%';
+                                        return ` ${context.label}: $${formatNumber(value)} (${pct})`;
+                                    }
+                                }
+                            }
+                        },
+                        cutout: '70%'
+                    }
+                });
+            }
+
+            // B. 處理 Bar Chart 損益分析圖表
+            const barCtx = document.getElementById('stockProfitBarChart').getContext('2d');
+            if (barChart) barChart.destroy();
+
+            if (portfolioItems.length === 0) {
+                document.getElementById('noDataBar').classList.remove('hidden');
+            } else {
+                document.getElementById('noDataBar').classList.add('hidden');
+                
+                const barLabels = portfolioItems.map(item => item.code);
+                const costData = portfolioItems.map(item => item.totalCost);
+                const profitData = portfolioItems.map(item => item.unrealizedPnL);
+
+                barChart = new Chart(barCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: barLabels,
+                        datasets: [
+                            {
+                                label: '持股總成本',
+                                data: costData,
+                                backgroundColor: '#475569',
+                                borderRadius: 6
+                            },
+                            {
+                                label: '未實現損益',
+                                data: profitData,
+                                backgroundColor: profitData.map(val => val >= 0 ? '#ef4444' : '#22c55e'),
+                                borderRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: false,
+                                grid: { display: false },
+                                ticks: { color: '#94a3b8', font: { family: 'Noto Sans TC' } }
+                            },
+                            y: {
+                                grid: { color: '#1e293b' },
+                                ticks: { color: '#94a3b8', font: { family: 'Noto Sans TC' } }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { color: '#94a3b8', font: { family: 'Noto Sans TC', size: 11 } }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // === 8. UI 控制：Tabs 切換與 Modal ===
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = "tab-btn px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-100 whitespace-nowrap";
+            });
+            document.getElementById(`btn-${tabId}`).className = "tab-btn px-3 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-500 whitespace-nowrap";
+        }
+
+        // 彈出客製化 Modal 警示
+        function showModal(title, msg) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMessage').innerHTML = msg;
+            
+            const actionsContainer = document.getElementById('modalActions');
+            actionsContainer.innerHTML = `
+                <button onclick="closeModal()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 py-2.5 rounded-xl font-semibold text-xs transition-colors">
+                    確認
+                </button>
+            `;
+
+            const modal = document.getElementById('customModal');
+            modal.classList.remove('hidden');
+        }
+
+        // 彈出包含排解診斷的進階失敗通知 Modal
+        function showDiagnosisModal(title, mainMsg) {
+            document.getElementById('modalTitle').innerText = title;
+            
+            const detailedMsg = `
+                <div class="space-y-3 text-left">
+                    <p class="text-xs text-rose-400 font-bold">${mainMsg}</p>
+                    <p class="text-[11px] text-slate-300 leading-relaxed border-t border-slate-800/80 pt-2.5">
+                        <span class="text-slate-100 font-bold">🛠️ 快速診斷指引（3選1排查）：</span><br>
+                        1. <span class="text-brand-300 font-bold">新版本發行漏做</span>：在 Apps Script 專案內修改程式碼後，必須進行「新增部署」選取「新版本」進行部署發行，原本的網址程式才會更新。<br>
+                        2. <span class="text-brand-300 font-bold">Google 多重登入衝突</span>：請將本系統改在 <span class="underline text-slate-200">「無痕/私密瀏覽分頁」</span> 內開啟並重新測試。<br>
+                        3. <span class="text-brand-300 font-bold">未完成帳號授權</span>：點選下方「在新分頁嘗試開啟」按鈕。若彈出警告，請選擇進階並允許存取。當您能看到空 JSON 資料時即代表打通了。
+                    </p>
+                </div>
+            `;
+            document.getElementById('modalMessage').innerHTML = detailedMsg;
+
+            const actionsContainer = document.getElementById('modalActions');
+            actionsContainer.innerHTML = `
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="openApiUrlInNewTab()" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-2.5 rounded-xl font-semibold text-xs transition-colors">
+                        在新分頁嘗試開啟
+                    </button>
+                    <button onclick="closeModal()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 py-2.5 rounded-xl font-semibold text-xs transition-colors">
+                        關閉
+                    </button>
+                </div>
+            `;
+
+            const modal = document.getElementById('customModal');
+            modal.classList.remove('hidden');
+        }
+
+        // 關閉 Modal
+        function closeModal() {
+            document.getElementById('customModal').classList.add('hidden');
+        }
+
+        // 頂部小 Toast 氣泡提示
+        function showToast(message, type = "success") {
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-5 right-5 z-50 flex items-center p-4 rounded-xl text-xs font-semibold shadow-2xl border transition-all duration-300 transform translate-y-2 opacity-0`;
+            
+            let colorClass = "bg-emerald-950 text-emerald-400 border-emerald-500/30";
+            let icon = "fa-circle-check";
+
+            if (type === "warning") {
+                colorClass = "bg-amber-950 text-amber-400 border-amber-500/30";
+                icon = "fa-triangle-exclamation";
+            } else if (type === "info") {
+                colorClass = "bg-slate-900 text-brand-300 border-slate-700";
+                icon = "fa-circle-info";
+            }
+
+            toast.className += ` ${colorClass}`;
+            toast.innerHTML = `<i class="fa-solid ${icon} mr-2 text-sm"></i><span>${message}</span>`;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 50);
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        // 重新同步資料 (手動觸發)
+        function syncData() {
+            initSystemData();
+        }
+
+        // === 9. 30分鐘定時刷新計時器 ===
+        function startRefreshTimer() {
+            resetTimer();
+
+            if (countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                countdownSeconds--;
+                if (countdownSeconds <= 0) {
+                    syncData();
+                    countdownSeconds = 1800; 
+                }
+                updateCountdownDisplay();
+            }, 1000);
+        }
+
+        function resetTimer() {
+            countdownSeconds = 1800;
+            updateCountdownDisplay();
+        }
+
+        function updateCountdownDisplay() {
+            const mins = Math.floor(countdownSeconds / 60);
+            const secs = countdownSeconds % 60;
+            document.getElementById('countdownTimer').innerText = 
+                `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        // === 10. 輔助小工具 (格式化) ===
+        function formatCurrency(val) {
+            return '$' + Number(val).toLocaleString('zh-TW', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+
+        function formatNumber(val) {
+            return Number(val).toLocaleString('zh-TW');
+        }
+
+        function formatPnLText(val) {
+            const num = Number(val);
+            const prefix = num > 0 ? '+' : '';
+            return prefix + num.toLocaleString('zh-TW', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+
+        // === 11. 複製程式碼與模板加載 ===
+        function copyAppsScriptCode() {
+            const javaScriptText = document.getElementById('appsScriptCodeArea');
+            javaScriptText.select();
+            document.execCommand('copy');
+            
+            const btnText = document.getElementById('copyBtnText');
+            const icon = document.getElementById('copyIcon');
+            
+            btnText.innerText = "複製成功！";
+            icon.className = "fa-solid fa-check mr-1.5";
+            
+            showToast("Apps Script 程式碼已成功複製至您的剪貼簿！", "success");
+
+            setTimeout(() => {
+                btnText.innerText = "複製程式碼";
+                icon.className = "fa-solid fa-copy mr-1.5";
+            }, 3000);
+        }
+
+        function loadAppsScriptTemplate() {
+            const code = `// ==========================================
+// Google Apps Script 雲端股票買賣資料庫對接指令碼 v1.3
+// ==========================================
+
+// 1. doGet：處理前端網頁讀取試算表資料的請求 (GET)
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var buySheet = getOrCreateSheet(ss, "買入紀錄");
+  var sellSheet = getOrCreateSheet(ss, "賣出紀錄");
+  var priceSheet = getOrCreateSheet(ss, "即時股價");
+  
+  var buyData = buySheet.getDataRange().getValues();
+  var sellData = sellSheet.getDataRange().getValues();
+  var priceData = priceSheet.getDataRange().getValues();
+  
+  var pricesMap = {};
+  if (priceData.length > 1) {
+    for (var i = 1; i < priceData.length; i++) {
+      if (priceData[i][0] && priceData[i][1] !== "") {
+        pricesMap[String(priceData[i][0]).trim().toUpperCase()] = Number(priceData[i][1]);
+      }
+    }
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({
+    buy: formatData(buyData, ss, "buy"),
+    sell: formatData(sellData, ss, "sell"),
+    prices: pricesMap
+  }))
+  .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 2. doPost：處理前端網頁寫入或匯入測試資料的請求 (POST)
+function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var params;
+  
+  try {
+    params = JSON.parse(e.postData.contents);
+  } catch(err) {
+    params = e.parameter;
+  }
+  
+  var action = params.action;
+  
+  if (action === "addBuy") {
+    var sheet = getOrCreateSheet(ss, "買入紀錄");
+    var lastRow = sheet.getLastRow() + 1;
+    sheet.appendRow([
+      params.date, 
+      String(params.stockCode).trim().toUpperCase(), 
+      params.shares, 
+      params.price, 
+      "=C" + lastRow + "*D" + lastRow
+    ]);
+    ensureStockInPrices(ss, params.stockCode);
+    
+  } else if (action === "addSell") {
+    var sheet = getOrCreateSheet(ss, "賣出紀錄");
+    var lastRow = sheet.getLastRow() + 1;
+    sheet.appendRow([
+      params.date, 
+      String(params.stockCode).trim().toUpperCase(), 
+      params.shares, 
+      params.price, 
+      "=C" + lastRow + "*D" + lastRow
+    ]);
+    ensureStockInPrices(ss, params.stockCode);
+    
+  } else if (action === "addTestData") {
+    var buySheet = getOrCreateSheet(ss, "買入紀錄");
+    var sellSheet = getOrCreateSheet(ss, "賣出紀錄");
+    
+    buySheet.appendRow(["2026-01-10", "TPE:2330", 1000, 600, "=C" + (buySheet.getLastRow()+1) + "*D" + (buySheet.getLastRow()+1)]);
+    buySheet.appendRow(["2026-02-15", "TPE:2330", 500, 620, "=C" + (buySheet.getLastRow()+1) + "*D" + (buySheet.getLastRow()+1)]);
+    buySheet.appendRow(["2026-01-20", "TPE:2317", 2000, 100, "=C" + (buySheet.getLastRow()+1) + "*D" + (buySheet.getLastRow()+1)]);
+    
+    sellSheet.appendRow(["2026-03-01", "TPE:2330", 500, 650, "=C" + (sellSheet.getLastRow()+1) + "*D" + (sellSheet.getLastRow()+1)]);
+    sellSheet.appendRow(["2026-04-05", "TPE:2317", 1000, 120, "=C" + (sellSheet.getLastRow()+1) + "*D" + (sellSheet.getLastRow()+1)]);
+    
+    ensureStockInPrices(ss, "TPE:2330");
+    ensureStockInPrices(ss, "TPE:2317");
+  }
+  
+  return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getOrCreateSheet(ss, name) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    if (name === "買入紀錄") {
+      sheet.appendRow(["日期", "股票代號", "買入股數", "買入價格", "買入總價"]);
+    } else if (name === "賣出紀錄") {
+      sheet.appendRow(["日期", "股票代號", "賣出股數", "賣出價格", "賣出總價"]);
+    } else if (name === "即時股價") {
+      sheet.appendRow(["股票代號", "即時股價"]);
+    }
+  }
+  return sheet;
+}
+
+function ensureStockInPrices(ss, stockCode) {
+  var sheet = getOrCreateSheet(ss, "即時股價");
+  var data = sheet.getDataRange().getValues();
+  var targetCode = String(stockCode).trim().toUpperCase();
+  var exists = false;
+  
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] && String(data[i][0]).trim().toUpperCase() === targetCode) {
+      exists = true;
+      break;
+    }
+  }
+  if (!exists) {
+    sheet.appendRow([targetCode, '=GOOGLEFINANCE("' + targetCode + '")']);
+  }
+}
+
+function formatData(values, ss, type) {
+  if (values.length <= 1) return [];
+  var result = [];
+  var tz = ss.getSpreadsheetTimeZone(); 
+  
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (row[0] === "" || !row[1]) continue;
+    
+    var dateVal = row[0];
+    if (dateVal instanceof Date) {
+      dateVal = Utilities.formatDate(dateVal, tz, "yyyy-MM-dd");
+    } else {
+      dateVal = String(dateVal).trim();
+    }
+    
+    result.push({
+      Date: dateVal,
+      StockCode: String(row[1]).trim().toUpperCase(),
+      Shares: Number(row[2]),
+      Price: Number(row[3]),
+      Total: Number(row[4])
+    });
+  }
+  return result;
+}`;
+            document.getElementById('appsScriptCodeArea').value = code;
+        }
+    </script>
+</body>
+</html>
